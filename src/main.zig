@@ -2,6 +2,7 @@ const std = @import("std");
 
 const exitCodes = enum {
     Success,
+    UnitializedProject,
     TooFewCommands,
     ProvideFilePath,
     CouldNotCreateDir,
@@ -28,6 +29,10 @@ pub fn main() !void {
         };
         std.debug.print("Initialised empty magit repository at {s}\n", .{path});
     } else if (std.mem.eql(u8, "hash", args[1])) {
+        _ = fs.openDir("./.magit", .{}) catch {
+            std.debug.print("Initialise project to use this command\n", .{});
+            std.process.exit(@intFromEnum(exitCodes.UnitializedProject));
+        };
         if (args.len < 3) {
             std.debug.print("Please provide a file path\n", .{});
             std.process.exit(@intFromEnum(exitCodes.ProvideFilePath));
@@ -54,7 +59,11 @@ pub fn main() !void {
         defer allocator.free(filePath);
         var handle = try fs.createFile(filePath, .{ .truncate = false });
         defer handle.close();
-        try handle.writeAll(&digest);
+        try file.seekTo(0);
+        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', maxBytes)) |line| {
+            defer allocator.free(line);
+            try handle.writeAll(line);
+        }
     } else if (std.mem.eql(u8, "cat", args[1])) {
         if (args.len < 3) {
             std.debug.print("Please provide a file path", .{});
