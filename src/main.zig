@@ -55,8 +55,26 @@ pub fn main() !void {
         var handle = try fs.createFile(filePath, .{ .truncate = false });
         defer handle.close();
         try handle.writeAll(&digest);
+    } else if (std.mem.eql(u8, "cat", args[1])) {
+        if (args.len < 3) {
+            std.debug.print("Please provide a file path", .{});
+            std.process.exit(@intFromEnum(exitCodes.ProvideFilePath));
+        }
+        const filePath = try std.fmt.allocPrint(allocator, "{s}/{s}/objects/{s}", .{ path, magit, args[2] });
+        var file = fs.openFile(filePath, .{}) catch |err| {
+            std.debug.print("Could not open the file at path {s}\n due to {}", .{ filePath, err });
+            return err;
+        };
+        defer file.close();
+        var bufferedReader = std.io.bufferedReader(file.reader());
+        const reader = bufferedReader.reader();
+        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 4096)) |line| {
+            defer allocator.free(line);
+            std.debug.print("{s}\n", .{line});
+        }
     }
 }
+
 fn hexToString(digest: [20]u8, allocator: std.mem.Allocator) ![]const u8 {
     var hexString = try allocator.alloc(u8, digest.len * 2);
     var i: usize = 0;
