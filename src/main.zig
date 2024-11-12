@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const exitCodes = enum {
+    Success,
     TooFewCommands,
     ProvideFilePath,
     CouldNotCreateDir,
@@ -34,7 +35,7 @@ pub fn main() !void {
         const maxBytes = 4096;
         var hasher = std.crypto.hash.Sha1.init(.{});
         var file = fs.openFile(args[2], .{}) catch {
-            std.debug.print("could not openFile", .{});
+            std.debug.print("could not open File {s}\n", .{args[2]});
             return;
         };
         defer file.close();
