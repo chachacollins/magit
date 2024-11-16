@@ -30,7 +30,7 @@ pub fn main() !void {
         };
         var handler = try fs.createFile(".magitignore", .{ .truncate = false });
         defer handler.close();
-        try handler.writeAll(".magit\n");
+        try handler.writeAll(".magit");
         std.debug.print("Initialised empty magit repository at {s}\n", .{path});
     } else if (std.mem.eql(u8, "hash", args[1])) {
         _ = fs.openDir("./.magit", .{}) catch {
@@ -87,21 +87,42 @@ pub fn main() !void {
             std.debug.print("{s}\n", .{line});
         }
     } else if (std.mem.eql(u8, "write-tree", args[1])) {
+        var ignoredFiles = std.ArrayList([]u8).init(allocator);
+        defer ignoredFiles.deinit();
+        const openFile = fs.openFile(".magitignore", .{}) catch |err| {
+            std.debug.print(".magit file not found: {}\n", .{err});
+            return;
+        };
+        defer openFile.close();
+        var bufferedReader = std.io.bufferedReader(openFile.reader());
+        var reader = bufferedReader.reader();
+        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 4096)) |line| {
+            defer allocator.free(line);
+            try ignoredFiles.append(line);
+        }
         var dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
         defer dir.close();
         var walker = try dir.walk(allocator);
         defer walker.deinit();
+        var isIgnored = std.StringHashMap(bool).init(allocator);
+        defer isIgnored.deinit();
+
         while (try walker.next()) |entry| {
-            switch (entry.kind) {
-                .directory => {
-                    std.debug.print("directory {s}\n", .{entry.path});
-                },
-                .file => {
-                    std.debug.print("file {s}\n", .{entry.path});
-                },
-                else => {
-                    std.debug.print("strange thing {s}\n", .{entry.path});
-                },
+            var ignored = false;
+            for (ignoredFiles.items) |value| {
+                if (std.mem.eql(u8, value, entry.path)) {
+                    ignored = true;
+                    break;
+                }
+            }
+            try isIgnored.put(entry.path, ignored);
+        }
+        var iter = isIgnored.iterator();
+        while (iter.next()) |entry| {
+            if (entry.value_ptr.*) {
+                std.debug.print("Ignored file or dir: {s}\n", .{entry.key_ptr.*});
+            } else {
+                std.debug.print("Processed file or dir: {s}\n", .{entry.key_ptr.*});
             }
         }
     }
