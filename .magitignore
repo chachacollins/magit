@@ -1,1 +1,4 @@
 .magit
+.git
+.zig-out
+.zig-cache

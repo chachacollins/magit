@@ -87,22 +87,34 @@ pub fn main() !void {
             std.debug.print("{s}\n", .{line});
         }
     } else if (std.mem.eql(u8, "write-tree", args[1])) {
+        var list = std.ArrayList([]u8).init(allocator);
+        defer list.deinit();
+        var file = fs.openFile(".magitignore", .{}) catch |err| {
+            std.debug.print("Could not open the file at path {s}\n due to {}", .{ ".magitignore", err });
+            return err;
+        };
+        defer file.close();
+        var bufferedReader = std.io.bufferedReader(file.reader());
+        const reader = bufferedReader.reader();
+        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 4096)) |line| {
+            try list.append(try allocator.dupe(u8, line));
+            defer allocator.free(line);
+        }
         var dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
         defer dir.close();
         var walker = try dir.walk(allocator);
         defer walker.deinit();
         while (try walker.next()) |entry| {
-            switch (entry.kind) {
-                .directory => {
-                    std.debug.print("directory {s}\n", .{entry.path});
-                },
-                .file => {
-                    std.debug.print("file {s}\n", .{entry.path});
-                },
-                else => {
-                    std.debug.print("strange thing {s}\n", .{entry.path});
-                },
+            var should_ignore = false;
+            for (list.items) |value| {
+                if (std.mem.startsWith(u8, entry.path, value)) {
+                    std.debug.print("ignored file or dir : {s}\n", .{entry.path});
+                    should_ignore = true;
+                    break;
+                }
             }
+            if (should_ignore) continue;
+            std.debug.print("{s}\n", .{entry.path});
         }
     }
 }
