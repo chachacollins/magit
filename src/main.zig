@@ -41,34 +41,7 @@ pub fn main() !void {
             std.debug.print("Please provide a file path\n", .{});
             std.process.exit(@intFromEnum(exitCodes.ProvideFilePath));
         }
-        const maxBytes = 4096;
-        var hasher = std.crypto.hash.Sha1.init(.{});
-        var file = fs.openFile(args[2], .{}) catch {
-            std.debug.print("could not open File {s}\n", .{args[2]});
-            return;
-        };
-        defer file.close();
-        var bufferedReader = std.io.bufferedReader(file.reader());
-        const reader = bufferedReader.reader();
-        hasher.update("blob\x00");
-        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', maxBytes)) |line| {
-            defer allocator.free(line);
-            hasher.update(line);
-        }
-        var digest: [20]u8 = undefined;
-        hasher.final(&digest);
-        fs.makeDir(magit ++ "/objects") catch {};
-        const hashString = try util.hexToString(digest, allocator);
-        defer allocator.free(hashString);
-        const filePath = try std.fmt.allocPrint(allocator, "{s}/{s}/objects/{s}", .{ path, magit, hashString });
-        defer allocator.free(filePath);
-        var handle = try fs.createFile(filePath, .{ .truncate = false });
-        defer handle.close();
-        try file.seekTo(0);
-        while (try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', maxBytes)) |line| {
-            defer allocator.free(line);
-            try handle.writeAll(line);
-        }
+        try util.hashFile(args[2], allocator, path);
     } else if (std.mem.eql(u8, "cat", args[1])) {
         if (args.len < 3) {
             std.debug.print("Please provide a file path", .{});
@@ -114,7 +87,12 @@ pub fn main() !void {
                 }
             }
             if (should_ignore) continue;
-            std.debug.print("{s}\n", .{entry.path});
+            switch (entry.kind) {
+                .file => {
+                    try util.hashFile(@constCast(entry.path), allocator, path);
+                },
+                else => {},
+            }
         }
     }
 }
